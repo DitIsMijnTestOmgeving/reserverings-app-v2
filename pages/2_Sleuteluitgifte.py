@@ -34,10 +34,11 @@ key_map = load_keys()
 bookings = supa.table("bookings").select("*").execute().data
 
 # Statuskleur per sleutelnummer, standaard alles groen
-alle_sleutels_set = set(k.strip() for v in load_keys().values() for k in v.split(","))
+alle_sleutels_set = set(k.strip() for v in key_map.values() for k in v.split(","))
 kleur_per_sleutel = {sleutel: "#90ee90" for sleutel in alle_sleutels_set}  # standaard groen
 
 # Overschrijf op basis van status in actuele reserveringen
+status_info = {}
 for r in bookings:
     status = r.get("status", "")
     sleutels = r.get("access_keys", "")
@@ -49,16 +50,19 @@ for r in bookings:
             continue
         if status == "Wachten":
             kleur_per_sleutel[s] = "#d3d3d3"  # grijs
+            status_info[s] = ("Sleutel is aangevraagd", r)
         elif status == "Goedgekeurd":
             kleur_per_sleutel[s] = "#FFD700"  # geel
+            status_info[s] = ("Sleutel is goedgekeurd om uit te geven", r)
         elif str(status).startswith("Uitgegeven op"):
             kleur_per_sleutel[s] = "#ff6961"  # rood
+            status_info[s] = (f"Sleutel is uitgegeven ({status})", r)
         elif str(status).startswith("Ingeleverd op"):
-            kleur_per_sleutel[s] = "#90ee90"  # expliciet groen (terug)
-
+            kleur_per_sleutel[s] = "#90ee90"  # groen
+            status_info[s] = (f"Sleutel is ingeleverd ({status})", r)
 
 # Tegeloverzicht
-alle_sleutels = sorted(set(k.strip() for v in key_map.values() for k in v.split(",")), key=lambda x: int(x))
+alle_sleutels = sorted(alle_sleutels_set, key=lambda x: int(x))
 html = """
 <style>
 .grid {
@@ -80,9 +84,12 @@ html = """
 <div class='grid'>
 """
 for nr in alle_sleutels:
-    kleur = kleur_per_sleutel.get(nr, "#e0e0e0")  # fallback grijs
+    kleur = kleur_per_sleutel.get(nr, "#e0e0e0")
     locatie = next((loc for loc, ks in key_map.items() if nr in ks), "")
-    html += f"<div class='tegel' title='{locatie}' style='background-color: {kleur};'>{nr}</div>"
+    status_text, r = status_info.get(nr, ("Sleutel is beschikbaar", {}))
+    extra = f"\nBedrijf: {r.get('name', '')}\nDatum: {r.get('date', '')} {r.get('time', '')}" if r else ""
+    tooltip = f"{locatie}\n{status_text}{extra}"
+    html += f"<div class='tegel' title='{tooltip}' style='background-color: {kleur};'>{nr}</div>"
 html += "</div>"
 st.markdown(html, unsafe_allow_html=True)
 
